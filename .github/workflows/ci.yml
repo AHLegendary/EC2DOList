@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Syntax check
+        run: python3 -m py_compile app.py
+
+      - name: Build and start app + database
+        run: docker compose up -d --build
+
+      - name: Wait for /health
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8000/health; then
+              echo; exit 0
+            fi
+            sleep 2
+          done
+          echo "Health check never passed"
+          docker compose logs
+          exit 1
+
+      - name: Write to and read from the database
+        run: |
+          curl -sf -o /dev/null -X POST -d "title=ci-smoke-test" http://localhost:8000/add
+          curl -sf http://localhost:8000/ | grep -q "ci-smoke-test"
+
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
