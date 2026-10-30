@@ -1,8 +1,9 @@
 name: Deploy
 
-# Runs after CI passes on main. Uses GitHub OIDC (no stored AWS keys) and
-# AWS Systems Manager (no open SSH port) to redeploy the container on EC2.
-# Skips cleanly until the repo variables below are set.
+# Runs after CI passes on main. Signs in with a limited IAM user's access keys
+# (stored as GitHub Secrets) and uses AWS Systems Manager (no open SSH port)
+# to redeploy the container on EC2.
+# Skips cleanly until the EC2_INSTANCE_ID repo variable is set.
 
 on:
   workflow_run:
@@ -12,7 +13,6 @@ on:
   workflow_dispatch:
 
 permissions:
-  id-token: write   # needed for OIDC
   contents: read
 
 concurrency:
@@ -22,15 +22,16 @@ concurrency:
 jobs:
   deploy:
     if: >
-      vars.AWS_ROLE_ARN != '' &&
+      vars.EC2_INSTANCE_ID != '' &&
       (github.event_name == 'workflow_dispatch' ||
        github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     steps:
-      - name: Assume AWS role via OIDC
+      - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-arn: ${{ vars.AWS_ROLE_ARN }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ vars.AWS_REGION }}
 
       - name: Redeploy on EC2 via SSM
